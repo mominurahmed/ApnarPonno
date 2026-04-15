@@ -11,6 +11,7 @@ import { FloatingActions } from './components/FloatingActions';
 import { NewsletterPopup } from './components/NewsletterPopup';
 import { ComparisonBar } from './components/ComparisonBar';
 import { Toaster } from './components/ui/sonner';
+import { SalesNotification } from './components/SalesNotification';
 import ErrorBoundary from './components/ErrorBoundary';
 
 // Pages (to be implemented)
@@ -81,6 +82,7 @@ export default function App() {
               <FloatingActions />
               <NewsletterPopup />
               <ComparisonBar />
+              <SalesNotification />
             </div>
             <Toaster />
           </Router>

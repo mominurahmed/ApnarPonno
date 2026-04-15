@@ -25,8 +25,8 @@ const Wishlist = () => {
           <p className="text-muted-foreground">
             Save your favorite organic products here to easily find them later.
           </p>
-          <Button asChild className="rounded-full px-8 h-12">
-            <Link to="/shop">Explore Products <ArrowRight className="ml-2 h-4 w-4" /></Link>
+          <Button render={<Link to="/shop" />} className="rounded-full px-8 h-12">
+            Explore Products <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
         </motion.div>
       </div>

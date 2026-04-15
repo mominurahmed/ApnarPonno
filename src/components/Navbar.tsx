@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingCart, User, Search, Menu, LogOut, LayoutDashboard, Heart, Phone, MapPin, Clock } from 'lucide-react';
+import { ShoppingCart, User, Search, Menu, LogOut, LayoutDashboard, Heart, Phone, MapPin, Clock, Truck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { Button } from './ui/button';
 import { auth, db } from '../firebase';
-import { collection, query, where, limit, getDocs } from 'firebase/firestore';
-import { Product } from '../types';
+import { collection, query, where, limit, getDocs, onSnapshot } from 'firebase/firestore';
+import { Product, SiteSettings } from '../types';
 import { CartDrawer } from './CartDrawer';
+import { motion } from 'motion/react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,6 +29,24 @@ export const Navbar = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [suggestions, setSuggestions] = useState<Product[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [siteSettings, setSiteSettings] = useState<SiteSettings | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'settings'), (snap) => {
+      if (!snap.empty) {
+        const settings = snap.docs[0].data() as SiteSettings;
+        setSiteSettings(settings);
+        if (settings.primaryColor) {
+          document.documentElement.style.setProperty('--primary', settings.primaryColor);
+        }
+        if (settings.themeMode) {
+          document.documentElement.classList.remove('theme-light', 'theme-dark', 'theme-luxury');
+          document.documentElement.classList.add(`theme-${settings.themeMode}`);
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     const fetchSuggestions = async () => {
@@ -70,22 +89,35 @@ export const Navbar = () => {
   return (
     <header className="sticky top-0 z-50 w-full">
       {/* Top Bar - Info */}
+      {siteSettings?.chinaImportBanner && (
+        <div className="bg-amber-400 text-slate-900 py-1.5 text-center overflow-hidden relative">
+          <motion.div 
+            animate={{ x: [0, -20, 0] }}
+            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            className="text-[10px] font-black uppercase tracking-[0.3em] flex items-center justify-center gap-4"
+          >
+            <Truck className="h-3 w-3" />
+            {siteSettings.chinaImportText || 'Directly Imported from China'}
+            <Truck className="h-3 w-3" />
+          </motion.div>
+        </div>
+      )}
       <div className="hidden md:block bg-slate-900 text-white py-2">
         <div className="container mx-auto px-4 flex justify-between items-center text-[11px] font-bold uppercase tracking-widest">
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2">
               <Phone className="h-3 w-3 text-primary" />
-              <span>+880 1234 567890</span>
+              <span>{siteSettings?.contactPhone || '+880 1234 567890'}</span>
             </div>
             <div className="flex items-center gap-2">
               <MapPin className="h-3 w-3 text-primary" />
-              <span>Dhaka, Bangladesh</span>
+              <span>{siteSettings?.address || 'Dhaka, Bangladesh'}</span>
             </div>
           </div>
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2">
               <Clock className="h-3 w-3 text-primary" />
-              <span>Delivery: 24/7 Service</span>
+              <span>{siteSettings?.announcement || 'Delivery: 24/7 Service'}</span>
             </div>
             <Link to="/track-order" className="hover:text-primary transition-colors">Track Order</Link>
           </div>
@@ -96,10 +128,8 @@ export const Navbar = () => {
         <div className="container mx-auto px-4 h-20 flex items-center justify-between gap-4 md:gap-8">
           <div className="flex items-center gap-4">
             <Sheet>
-              <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="lg:hidden text-primary hover:bg-primary/5">
-                  <Menu className="h-6 w-6" />
-                </Button>
+              <SheetTrigger render={<Button variant="ghost" size="icon" className="lg:hidden text-primary hover:bg-primary/5" />}>
+                <Menu className="h-6 w-6" />
               </SheetTrigger>
               <SheetContent side="left" className="w-[300px]">
                 <div className="flex flex-col gap-6 mt-8">
@@ -113,8 +143,12 @@ export const Navbar = () => {
               </SheetContent>
             </Sheet>
             
-            <Link to="/" className="text-2xl md:text-3xl font-bold text-primary tracking-tight shrink-0">
-              ApnarPonno
+            <Link to="/" className="text-2xl md:text-3xl font-bold text-primary tracking-tight shrink-0 flex items-center gap-2">
+              {siteSettings?.logoUrl ? (
+                <img src={siteSettings.logoUrl} alt={siteSettings.siteName} className="h-10 w-auto object-contain" />
+              ) : (
+                siteSettings?.siteName || 'ApnarPonno'
+              )}
             </Link>
           </div>
 
@@ -188,7 +222,7 @@ export const Navbar = () => {
 
             {user ? (
               <DropdownMenu>
-                <DropdownMenuTrigger asChild>
+                <DropdownMenuTrigger render={
                   <button className="flex flex-col items-center group outline-none">
                     <div className="h-7 w-7 rounded-full overflow-hidden border-2 border-slate-200 group-hover:border-primary transition-all">
                       {profile?.photoURL ? (
@@ -199,7 +233,7 @@ export const Navbar = () => {
                     </div>
                     <span className="hidden md:block text-[10px] font-bold text-slate-500 uppercase mt-1">Account</span>
                   </button>
-                </DropdownMenuTrigger>
+                } />
                 <DropdownMenuContent align="end" className="w-64 mt-2 rounded-2xl luxury-shadow border-slate-100">
                   <DropdownMenuLabel className="p-4">
                     <div className="flex items-center gap-3">
@@ -219,25 +253,25 @@ export const Navbar = () => {
                   <DropdownMenuSeparator />
                   <div className="p-2">
                     {isAdmin && (
-                      <DropdownMenuItem asChild>
+                      <DropdownMenuItem render={
                         <Link to="/admin" className="flex items-center p-2 rounded-xl hover:bg-slate-50 cursor-pointer">
                           <LayoutDashboard className="mr-3 h-4 w-4 text-primary" />
                           <span className="text-sm font-medium">Admin Dashboard</span>
                         </Link>
-                      </DropdownMenuItem>
+                      } />
                     )}
-                    <DropdownMenuItem asChild>
+                    <DropdownMenuItem render={
                       <Link to="/profile" className="flex items-center p-2 rounded-xl hover:bg-slate-50 cursor-pointer">
                         <User className="mr-3 h-4 w-4 text-primary" />
                         <span className="text-sm font-medium">My Profile</span>
                       </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
+                    } />
+                    <DropdownMenuItem render={
                       <Link to="/orders" className="flex items-center p-2 rounded-xl hover:bg-slate-50 cursor-pointer">
                         <ShoppingCart className="mr-3 h-4 w-4 text-primary" />
                         <span className="text-sm font-medium">My Orders</span>
                       </Link>
-                    </DropdownMenuItem>
+                    } />
                   </div>
                   <DropdownMenuSeparator />
                   <div className="p-2">

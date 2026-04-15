@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingCart, Star, Eye, Heart, GitCompare } from 'lucide-react';
+import { ShoppingCart, Star, Eye, Heart, GitCompare, Truck } from 'lucide-react';
 import { Product } from '../types';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
@@ -72,13 +72,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         </div>
 
         {/* Urgency Badge */}
-        {product.stock > 0 && product.stock < 10 && (
-          <div className="absolute top-3 left-3 z-10">
+        <div className="absolute top-3 left-3 z-10 flex flex-col gap-2">
+          {product.stock > 0 && product.stock < 10 && (
             <Badge className="bg-orange-500 text-white border-none text-[10px] font-bold px-2 py-0.5 rounded-full">
               Only {product.stock} Left!
             </Badge>
-          </div>
-        )}
+          )}
+          {product.isChinaImport && (
+            <Badge className="bg-amber-400 text-slate-900 border-none text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1">
+              <Truck className="h-3 w-3" />
+              China Import
+            </Badge>
+          )}
+        </div>
 
         <Link to={`/products/${product.id}`} className="relative aspect-[4/5] overflow-hidden bg-slate-50 block">
           <img

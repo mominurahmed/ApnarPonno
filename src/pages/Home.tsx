@@ -14,12 +14,16 @@ const Home = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [flashSaleProducts, setFlashSaleProducts] = useState<Product[]>([]);
+
   useEffect(() => {
     const fetchData = async () => {
       try {
         const pQuery = query(collection(db, 'products'), orderBy('createdAt', 'desc'), limit(8));
         const pSnap = await getDocs(pQuery);
-        setProducts(pSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
+        const allProducts = pSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+        setProducts(allProducts);
+        setFlashSaleProducts(allProducts.filter(p => p.isFlashSale).slice(0, 4));
 
         const cSnap = await getDocs(collection(db, 'categories'));
         setCategories(cSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category)));
@@ -173,6 +177,35 @@ const Home = () => {
         </div>
       </section>
 
+      {/* Flash Sale Section */}
+      {flashSaleProducts.length > 0 && (
+        <section className="py-24 bg-red-50">
+          <div className="container mx-auto px-4">
+            <div className="flex flex-col md:flex-row justify-between items-center mb-12 gap-6">
+              <div className="flex items-center gap-4">
+                <div className="h-16 w-16 bg-red-500 rounded-2xl flex items-center justify-center luxury-shadow animate-pulse">
+                  <Zap className="h-8 w-8 text-white fill-current" />
+                </div>
+                <div>
+                  <h2 className="text-4xl font-heading font-bold tracking-tight text-slate-900">Flash Sales</h2>
+                  <p className="text-red-600 font-bold uppercase tracking-widest text-xs">Limited Time Offers - Don't Miss Out!</p>
+                </div>
+              </div>
+              <Link to="/offers">
+                <Button variant="outline" className="rounded-full border-red-200 text-red-600 hover:bg-red-500 hover:text-white font-bold h-12 px-8">
+                  View All Offers
+                </Button>
+              </Link>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+              {flashSaleProducts.map((product) => (
+                <ProductCard key={product.id} product={product} />
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Featured Categories - Visual Grid */}
       <section className="py-24 bg-slate-50/50">
         <div className="container mx-auto px-4">
@@ -256,68 +289,6 @@ const Home = () => {
         </div>
       </section>
 
-      {/* Meet the Farmer - Storytelling Section */}
-      <section className="py-24 bg-slate-900 text-white relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-1/2 h-full bg-primary/10 blur-[150px]" />
-        <div className="container mx-auto px-4 relative z-10">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
-            <div className="relative">
-              <div className="rounded-[3rem] overflow-hidden luxury-shadow aspect-[4/5] relative">
-                <img 
-                  src="https://images.unsplash.com/photo-1595113316349-9fa4ee24f884?auto=format&fit=crop&q=80&w=1000" 
-                  alt="Farmer" 
-                  className="w-full h-full object-cover"
-                  referrerPolicy="no-referrer"
-                />
-              </div>
-              <div className="absolute -bottom-10 -right-10 bg-white p-8 rounded-3xl luxury-shadow border border-slate-100 hidden md:block text-slate-900 max-w-xs">
-                <Quote className="h-8 w-8 text-primary/20 mb-4" />
-                <p className="text-sm italic font-serif leading-relaxed">
-                  "We believe that true health starts from the soil. Our mission is to bring the purest gifts of nature to your table."
-                </p>
-                <div className="mt-4 flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-slate-100 overflow-hidden">
-                    <img src="https://i.pravatar.cc/100?u=farmer" alt="Farmer" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold">Ahmed Kabir</p>
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Master Farmer</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-8">
-              <div className="flex items-center gap-2 text-primary">
-                <ShieldCheck className="h-5 w-5" />
-                <span className="text-xs font-bold uppercase tracking-[0.3em]">Our Heritage</span>
-              </div>
-              <h2 className="text-4xl md:text-6xl font-heading font-bold leading-tight">From Our Fields <br /> To Your Family</h2>
-              <p className="text-lg text-white/60 font-light leading-relaxed">
-                Every product at ApnarPonno tells a story of dedication, tradition, and respect for the earth. We work directly with local farmers who share our commitment to organic excellence.
-              </p>
-              <ul className="space-y-4">
-                {[
-                  "Directly sourced from organic farms",
-                  "No synthetic pesticides or fertilizers",
-                  "Traditional harvesting methods",
-                  "Fair trade practices for farmers"
-                ].map((item, i) => (
-                  <li key={i} className="flex items-center gap-3">
-                    <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-                      <div className="h-2 w-2 rounded-full bg-primary" />
-                    </div>
-                    <span className="text-sm font-medium text-white/80">{item}</span>
-                  </li>
-                ))}
-              </ul>
-              <Button size="lg" className="h-14 px-10 rounded-full font-bold bg-white text-slate-900 hover:bg-slate-100">
-                Learn About Our Process
-              </Button>
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* Testimonials - Luxury Slider Style */}
       <section className="py-24 bg-slate-50">
@@ -358,70 +329,7 @@ const Home = () => {
         </div>
       </section>
 
-      {/* Instagram Feed - Visual Grid */}
-      <section className="py-24">
-        <div className="container mx-auto px-4">
-          <div className="text-center space-y-4 mb-16">
-            <div className="flex items-center justify-center gap-2 text-primary">
-              <Instagram className="h-5 w-5" />
-              <span className="text-xs font-bold uppercase tracking-[0.3em]">Follow Us</span>
-            </div>
-            <h2 className="text-4xl md:text-5xl font-heading font-bold tracking-tight">@ApnarPonno_Organic</h2>
-          </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            {[1, 2, 3, 4, 5, 6].map(i => (
-              <div key={i} className="relative aspect-square rounded-2xl overflow-hidden group cursor-pointer">
-                <img 
-                  src={`https://images.unsplash.com/photo-${1500000000000 + i * 100000}?auto=format&fit=crop&q=80&w=400`} 
-                  alt="Organic Lifestyle" 
-                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                  referrerPolicy="no-referrer"
-                />
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <Instagram className="text-white h-8 w-8" />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Luxury Newsletter */}
-      <section className="container mx-auto px-4 py-24">
-        <div className="relative rounded-[4rem] overflow-hidden bg-slate-900 p-12 md:p-24 text-center text-white">
-          <div className="absolute top-0 left-0 w-full h-full">
-            <img 
-              src="https://images.unsplash.com/photo-1464226184884-fa280b87c399?auto=format&fit=crop&q=80&w=2000" 
-              alt="Organic Background" 
-              className="w-full h-full object-cover opacity-20"
-              referrerPolicy="no-referrer"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/40 to-transparent" />
-          </div>
-          
-          <div className="relative z-10 max-w-2xl mx-auto space-y-10">
-            <div className="space-y-4">
-              <Badge className="bg-primary text-white border-none px-6 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.3em]">Join the Inner Circle</Badge>
-              <h2 className="text-4xl md:text-6xl font-heading font-bold tracking-tight leading-tight">Get Exclusive <br /> Organic Insights</h2>
-              <p className="text-white/60 text-lg font-light">Subscribe to receive curated offers, seasonal harvest updates, and wellness tips from our experts.</p>
-            </div>
-            
-            <form className="flex flex-col sm:flex-row gap-4">
-              <input 
-                type="email" 
-                placeholder="Your email address" 
-                className="flex-grow h-16 px-8 rounded-full bg-white/10 backdrop-blur-md border border-white/20 outline-none focus:border-primary transition-all text-lg"
-                required
-              />
-              <Button type="submit" size="lg" className="h-16 px-12 rounded-full font-bold bg-primary hover:bg-primary/90 text-white shadow-2xl shadow-primary/40">
-                Subscribe
-              </Button>
-            </form>
-            <p className="text-[10px] text-white/40 uppercase tracking-widest font-bold">No spam. Only pure organic goodness.</p>
-          </div>
-        </div>
-      </section>
     </div>
   );
 };

@@ -19,6 +19,9 @@ export interface Product {
   sku?: string;
   weight?: string;
   createdAt: string;
+  isFlashSale?: boolean;
+  flashSaleEnd?: string;
+  isChinaImport?: boolean;
 }
 
 export interface Category {
@@ -58,6 +61,11 @@ export interface SiteSettings {
   instagramUrl?: string;
   youtubeUrl?: string;
   announcement?: string;
+  primaryColor?: string;
+  logoUrl?: string;
+  chinaImportBanner?: boolean;
+  chinaImportText?: string;
+  themeMode?: 'light' | 'dark' | 'luxury';
 }
 
 export interface Order {

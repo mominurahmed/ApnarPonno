@@ -1,28 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import { 
-  LayoutDashboard, 
-  Package, 
-  ShoppingCart, 
-  Users, 
-  Settings, 
-  Plus, 
-  Search, 
-  MoreVertical,
-  TrendingUp,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  Tag,
-  Star,
-  Megaphone,
-  Copy,
-  BarChart3,
-  DollarSign,
-  UserPlus,
-  Truck,
-  AlertCircle
+  LayoutDashboard, Package, ShoppingCart, Users, Settings, 
+  Plus, Search, Edit, Trash2, CheckCircle, XCircle, Clock, 
+  ChevronRight, ChevronDown, DollarSign, TrendingUp, ArrowUpRight, 
+  ArrowDownRight, Image as ImageIcon, Star, Copy, Truck, AlertCircle,
+  Megaphone, Tag, BarChart3, Sparkles, Filter, CheckSquare, Square,
+  CheckCircle2, Zap
 } from 'lucide-react';
+import { generateProductDescription, analyzeSalesTrends } from '../services/geminiService';
 import { motion } from 'motion/react';
 import { db, storage } from '../firebase';
 import { collection, query, getDocs, orderBy, limit, doc, updateDoc, addDoc, deleteDoc, where, getDoc, setDoc } from 'firebase/firestore';
@@ -62,11 +48,17 @@ const AdminOverview = () => {
     totalSales: 0,
     totalOrders: 0,
     totalProducts: 0,
-    totalCustomers: 0
+    totalCustomers: 0,
+    avgRating: 0,
+    totalReviews: 0
   });
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
+  const [recentReviews, setRecentReviews] = useState<Review[]>([]);
+  const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
+  const [aiInsights, setAiInsights] = useState<string>('');
   const [chartData, setChartData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -74,15 +66,27 @@ const AdminOverview = () => {
         const ordersSnap = await getDocs(collection(db, 'orders'));
         const productsSnap = await getDocs(collection(db, 'products'));
         const usersSnap = await getDocs(collection(db, 'users'));
+        const reviewsSnap = await getDocs(collection(db, 'reviews'));
         
+        const products = productsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Product));
+        const lowStock = products.filter(p => p.stock <= 10);
+        setLowStockProducts(lowStock);
+
         const orders = ordersSnap.docs.map(d => ({ id: d.id, ...d.data() } as Order));
         const totalSales = orders.reduce((sum, o) => sum + o.totalAmount, 0);
         
+        const reviews = reviewsSnap.docs.map(d => d.data() as Review);
+        const avgRating = reviews.length > 0 
+          ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length 
+          : 0;
+
         setStats({
           totalSales,
           totalOrders: ordersSnap.size,
           totalProducts: productsSnap.size,
-          totalCustomers: usersSnap.size
+          totalCustomers: usersSnap.size,
+          avgRating,
+          totalReviews: reviewsSnap.size
         });
 
         // Process chart data (last 7 days)
@@ -109,6 +113,10 @@ const AdminOverview = () => {
         const recentQuery = query(collection(db, 'orders'), orderBy('createdAt', 'desc'), limit(5));
         const recentSnap = await getDocs(recentQuery);
         setRecentOrders(recentSnap.docs.map(d => ({ id: d.id, ...d.data() } as Order)));
+
+        const reviewsQuery = query(collection(db, 'reviews'), orderBy('createdAt', 'desc'), limit(4));
+        const reviewsRecentSnap = await getDocs(reviewsQuery);
+        setRecentReviews(reviewsRecentSnap.docs.map(d => ({ id: d.id, ...d.data() } as Review)));
       } catch (error) {
         console.error("Error fetching stats:", error);
       }
@@ -164,6 +172,18 @@ const AdminOverview = () => {
     }
   };
 
+  const handleGetAiInsights = async () => {
+    setAnalyzing(true);
+    try {
+      const insights = await analyzeSalesTrends(chartData);
+      setAiInsights(insights);
+    } catch (error) {
+      toast.error("AI analysis failed");
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex justify-between items-center">
@@ -171,16 +191,51 @@ const AdminOverview = () => {
           <h1 className="text-3xl font-bold tracking-tight">Dashboard Overview</h1>
           <p className="text-muted-foreground">Welcome back, Admin. Here's what's happening today.</p>
         </div>
-        <Button onClick={handleSeedData} disabled={loading} variant="outline" className="rounded-xl">
-          {loading ? "Seeding..." : "Seed Initial Data"}
-        </Button>
+        <div className="flex gap-3">
+          <Button 
+            onClick={handleGetAiInsights} 
+            disabled={analyzing} 
+            variant="outline" 
+            className="rounded-xl border-primary/20 bg-primary/5 hover:bg-primary/10 text-primary"
+          >
+            <Sparkles className={`h-4 w-4 mr-2 ${analyzing ? 'animate-pulse' : ''}`} />
+            {analyzing ? "Analyzing..." : "AI Insights"}
+          </Button>
+          <Button onClick={handleSeedData} disabled={loading} variant="outline" className="rounded-xl">
+            {loading ? "Seeding..." : "Seed Initial Data"}
+          </Button>
+        </div>
       </div>
+
+      {aiInsights && (
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-6 bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-100 rounded-3xl relative overflow-hidden"
+        >
+          <div className="absolute top-0 right-0 p-4 opacity-10">
+            <Sparkles className="h-24 w-24 text-indigo-600" />
+          </div>
+          <div className="relative z-10">
+            <h3 className="text-sm font-bold text-indigo-900 flex items-center gap-2 mb-2">
+              <Sparkles className="h-4 w-4" />
+              AI Business Insights
+            </h3>
+            <div className="text-sm text-indigo-800 whitespace-pre-line leading-relaxed">
+              {aiInsights}
+            </div>
+            <Button variant="ghost" size="sm" className="mt-4 text-indigo-600 hover:bg-indigo-100 h-7 text-[10px] font-bold uppercase" onClick={() => setAiInsights('')}>
+              Dismiss
+            </Button>
+          </div>
+        </motion.div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
           { title: "Total Revenue", value: `৳${stats.totalSales.toLocaleString()}`, icon: DollarSign, color: "text-emerald-600", bg: "bg-emerald-50", trend: "+12.5%", desc: "Lifetime earnings" },
           { title: "Total Orders", value: stats.totalOrders, icon: ShoppingCart, color: "text-amber-600", bg: "bg-amber-50", trend: "+8.2%", desc: "Completed orders" },
-          { title: "Active Products", value: stats.totalProducts, icon: Package, color: "text-indigo-600", bg: "bg-indigo-50", trend: "+2", desc: "Live in store" },
+          { title: "Customer Rating", value: `${stats.avgRating.toFixed(1)}/5.0`, icon: Star, color: "text-yellow-600", bg: "bg-yellow-50", trend: stats.totalReviews, desc: "Total reviews" },
           { title: "Total Customers", value: stats.totalCustomers, icon: Users, color: "text-rose-600", bg: "bg-rose-50", trend: "+15.3%", desc: "Registered users" },
         ].map((stat, i) => (
           <Card key={i} className="border-none shadow-sm hover:shadow-xl transition-all duration-300 rounded-3xl overflow-hidden group">
@@ -205,9 +260,16 @@ const AdminOverview = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <Card className="lg:col-span-2 border-none shadow-sm rounded-2xl">
-          <CardHeader>
-            <CardTitle>Sales Analytics</CardTitle>
-            <CardDescription>Daily sales performance for the last 7 days</CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle>Sales Analytics</CardTitle>
+              <CardDescription>Daily sales performance for the last 7 days</CardDescription>
+            </div>
+            {lowStockProducts.length > 0 && (
+              <Badge variant="destructive" className="rounded-full animate-pulse">
+                {lowStockProducts.length} Low Stock Items
+              </Badge>
+            )}
           </CardHeader>
           <CardContent className="h-[350px] pt-4">
             <ResponsiveContainer width="100%" height="100%">
@@ -250,9 +312,53 @@ const AdminOverview = () => {
         </Card>
 
         <Card className="border-none shadow-sm rounded-2xl">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle>Recent Reviews</CardTitle>
+              <CardDescription>Latest customer feedback</CardDescription>
+            </div>
+            <Star className="h-5 w-5 text-yellow-500 fill-current" />
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              {recentReviews.length > 0 ? recentReviews.map((review) => (
+                <div key={review.id} className="space-y-2 pb-4 border-b border-slate-50 last:border-0 last:pb-0">
+                  <div className="flex justify-between items-start">
+                    <div className="flex items-center gap-2">
+                      <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-bold">
+                        {review.userName.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold">{review.userName}</p>
+                        <div className="flex gap-0.5">
+                          {[...Array(5)].map((_, i) => (
+                            <Star key={i} className={`h-2.5 w-2.5 ${i < review.rating ? 'text-yellow-400 fill-current' : 'text-slate-200'}`} />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground">
+                      {review.createdAt ? new Date(review.createdAt).toLocaleDateString() : 'N/A'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 line-clamp-2 italic">"{review.comment}"</p>
+                </div>
+              )) : (
+                <div className="text-center py-8 text-muted-foreground text-sm">No reviews yet</div>
+              )}
+            </div>
+            <Button render={<Link to="/admin/reviews" />} variant="ghost" className="w-full mt-6 text-primary font-bold text-xs uppercase tracking-widest">
+              Manage All Reviews
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <Card className="border-none shadow-sm rounded-2xl">
           <CardHeader>
             <CardTitle>Recent Orders</CardTitle>
-            <CardDescription>Latest transactions in your store</CardDescription>
+            <CardDescription>Latest transactions</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-6">
@@ -278,8 +384,41 @@ const AdminOverview = () => {
                 </div>
               ))}
             </div>
-            <Button variant="ghost" className="w-full mt-6 text-primary font-bold text-xs uppercase tracking-widest" asChild>
-              <Link to="/admin/orders">View All Orders</Link>
+            <Button render={<Link to="/admin/orders" />} variant="ghost" className="w-full mt-6 text-primary font-bold text-xs uppercase tracking-widest">
+              View All Orders
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-2 border-none shadow-sm rounded-2xl">
+          <CardHeader>
+            <CardTitle>Top Selling Products</CardTitle>
+            <CardDescription>Most popular items in your store</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {[
+                { name: "Premium Sundarban Honey", sales: 145, revenue: 123250, image: "https://images.unsplash.com/photo-1587049352846-4a222e784d38?w=800" },
+                { name: "Traditional Cow Ghee", sales: 98, revenue: 117600, image: "https://images.unsplash.com/photo-1589927986089-35812388d1f4?w=800" },
+                { name: "Premium Mixed Dry Fruits", sales: 76, revenue: 114000, image: "https://images.unsplash.com/photo-1596591606975-97ee5cef3a1e?w=800" },
+                { name: "Organic Turmeric Powder", sales: 112, revenue: 39200, image: "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=800" },
+              ].map((product, i) => (
+                <div key={i} className="flex items-center gap-4 p-3 rounded-2xl bg-slate-50 hover:bg-slate-100 transition-colors">
+                  <div className="h-12 w-12 rounded-xl overflow-hidden shrink-0">
+                    <img src={product.image} alt={product.name} className="h-full w-full object-cover" />
+                  </div>
+                  <div className="flex-grow min-w-0">
+                    <p className="text-sm font-bold truncate">{product.name}</p>
+                    <div className="flex justify-between items-center mt-1">
+                      <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">{product.sales} Sales</p>
+                      <p className="text-xs font-bold text-primary">৳{product.revenue.toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <Button render={<Link to="/admin/products" />} variant="ghost" className="w-full mt-6 text-primary font-bold text-xs uppercase tracking-widest">
+              Manage Inventory
             </Button>
           </CardContent>
         </Card>
@@ -295,6 +434,7 @@ const ProductManagement = () => {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [generatingAi, setGeneratingAi] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [formData, setFormData] = useState({
@@ -306,7 +446,10 @@ const ProductManagement = () => {
     stock: 0,
     sku: '',
     weight: '',
-    images: ['']
+    images: [''],
+    isFlashSale: false,
+    flashSaleEnd: '',
+    isChinaImport: true
   });
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'product' | 'category') => {
@@ -358,7 +501,10 @@ const ProductManagement = () => {
         stock: editingProduct.stock,
         sku: editingProduct.sku || '',
         weight: editingProduct.weight || '',
-        images: editingProduct.images.length > 0 ? editingProduct.images : ['']
+        images: editingProduct.images.length > 0 ? editingProduct.images : [''],
+        isFlashSale: editingProduct.isFlashSale || false,
+        flashSaleEnd: editingProduct.flashSaleEnd || '',
+        isChinaImport: editingProduct.isChinaImport !== undefined ? editingProduct.isChinaImport : true
       });
     } else {
       setFormData({
@@ -370,10 +516,30 @@ const ProductManagement = () => {
         stock: 0,
         sku: '',
         weight: '',
-        images: ['']
+        images: [''],
+        isFlashSale: false,
+        flashSaleEnd: '',
+        isChinaImport: true
       });
     }
   }, [editingProduct]);
+
+  const handleAiGenerateDescription = async () => {
+    if (!formData.name || !formData.category) {
+      toast.error("Please enter product name and category first");
+      return;
+    }
+    setGeneratingAi(true);
+    try {
+      const desc = await generateProductDescription(formData.name, formData.category);
+      setFormData(prev => ({ ...prev, description: desc }));
+      toast.success("AI description generated!");
+    } catch (error) {
+      toast.error("AI generation failed");
+    } finally {
+      setGeneratingAi(false);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!formData.name || !formData.category || formData.price <= 0) {
@@ -479,7 +645,19 @@ const ProductManagement = () => {
                   />
                 </div>
                 <div className="space-y-2 col-span-2">
-                  <Label className="font-bold">Description</Label>
+                  <div className="flex justify-between items-center">
+                    <Label className="font-bold">Description</Label>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-7 text-[10px] font-bold text-primary hover:bg-primary/10"
+                      onClick={handleAiGenerateDescription}
+                      disabled={generatingAi}
+                    >
+                      <Sparkles className={`h-3 w-3 mr-1 ${generatingAi ? 'animate-spin' : ''}`} />
+                      {generatingAi ? "Generating..." : "Generate with AI"}
+                    </Button>
+                  </div>
                   <textarea 
                     className="w-full min-h-[100px] rounded-xl border border-input bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
                     value={formData.description} 
@@ -519,6 +697,43 @@ const ProductManagement = () => {
                 <div className="space-y-2">
                   <Label className="font-bold">Stock Quantity*</Label>
                   <Input type="number" value={formData.stock} onChange={e => setFormData({...formData, stock: Number(e.target.value)})} className="rounded-xl h-12" />
+                </div>
+                <div className="space-y-4 col-span-2 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Zap className={`h-4 w-4 ${formData.isFlashSale ? 'text-red-500 fill-red-500' : 'text-slate-400'}`} />
+                      <Label className="font-bold">Flash Sale</Label>
+                    </div>
+                    <button 
+                      className={`w-10 h-6 rounded-full transition-colors relative ${formData.isFlashSale ? 'bg-red-500' : 'bg-slate-200'}`}
+                      onClick={() => setFormData({...formData, isFlashSale: !formData.isFlashSale})}
+                    >
+                      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${formData.isFlashSale ? 'left-5' : 'left-1'}`} />
+                    </button>
+                  </div>
+                  {formData.isFlashSale && (
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold text-slate-500">Flash Sale End Date & Time</Label>
+                      <Input 
+                        type="datetime-local" 
+                        value={formData.flashSaleEnd} 
+                        onChange={e => setFormData({...formData, flashSaleEnd: e.target.value})} 
+                        className="rounded-xl h-10"
+                      />
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+                    <div className="flex items-center gap-2">
+                      <Truck className={`h-4 w-4 ${formData.isChinaImport ? 'text-amber-500' : 'text-slate-400'}`} />
+                      <Label className="font-bold">China Import</Label>
+                    </div>
+                    <button 
+                      className={`w-10 h-6 rounded-full transition-colors relative ${formData.isChinaImport ? 'bg-amber-500' : 'bg-slate-200'}`}
+                      onClick={() => setFormData({...formData, isChinaImport: !formData.isChinaImport})}
+                    >
+                      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${formData.isChinaImport ? 'left-5' : 'left-1'}`} />
+                    </button>
+                  </div>
                 </div>
                 <div className="space-y-2 col-span-2">
                   <Label className="font-bold">Product Image</Label>
@@ -798,11 +1013,39 @@ const CategoryManagement = () => {
   );
 };
 
+const OrderTimeline = ({ status, createdAt, updatedAt, courierInfo }: { status: string, createdAt: any, updatedAt?: string, courierInfo?: any }) => {
+  const steps = [
+    { label: 'Placed', active: true },
+    { label: 'Processing', active: ['processing', 'shipped', 'delivered'].includes(status) },
+    { label: 'Shipped', active: ['shipped', 'delivered'].includes(status) },
+    { label: 'Delivered', active: status === 'delivered' },
+  ];
+
+  return (
+    <div className="relative flex justify-between items-center w-full py-6 px-4">
+      <div className="absolute h-[2px] bg-slate-100 left-8 right-8 top-1/2 -translate-y-1/2 z-0" />
+      {steps.map((step, i) => (
+        <div key={i} className="relative z-10 flex flex-col items-center">
+          <div className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all duration-500 ${
+            step.active ? 'bg-primary border-primary shadow-lg shadow-primary/20' : 'bg-white border-slate-200'
+          }`}>
+            {step.active && <CheckCircle2 className="h-3 w-3 text-white" />}
+          </div>
+          <p className={`text-[9px] font-bold mt-2 uppercase tracking-tighter ${step.active ? 'text-primary' : 'text-slate-400'}`}>
+            {step.label}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 const OrderManagement = ({ showIncomplete = false }: { showIncomplete?: boolean }) => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
 
   const fetchOrders = async () => {
     setLoading(true);
@@ -877,6 +1120,113 @@ const OrderManagement = ({ showIncomplete = false }: { showIncomplete?: boolean 
     }
   };
 
+  const handlePrintInvoice = (order: Order) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const itemsHtml = order.items.map(item => `
+      <tr>
+        <td style="padding: 8px; border-bottom: 1px solid #eee;">${item.name}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: center;">${item.quantity}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">৳${item.price.toLocaleString()}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">৳${(item.price * item.quantity).toLocaleString()}</td>
+      </tr>
+    `).join('');
+
+    const subtotal = order.totalAmount - (order.totalAmount >= 2000 ? 0 : 100);
+    const shipping = order.totalAmount >= 2000 ? 0 : 100;
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Invoice - ${order.id}</title>
+          <style>
+            body { font-family: 'Inter', sans-serif; color: #333; line-height: 1.5; padding: 40px; }
+            .header { display: flex; justify-content: space-between; margin-bottom: 40px; border-bottom: 2px solid #10b981; padding-bottom: 20px; }
+            .logo { font-size: 24px; font-weight: bold; color: #10b981; }
+            .invoice-info { text-align: right; }
+            .section { margin-bottom: 30px; }
+            .section-title { font-size: 12px; font-weight: bold; text-transform: uppercase; color: #666; margin-bottom: 10px; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+            th { background: #f9fafb; padding: 10px; text-align: left; font-size: 12px; text-transform: uppercase; }
+            .totals { margin-left: auto; width: 250px; }
+            .total-row { display: flex; justify-content: space-between; padding: 5px 0; }
+            .grand-total { font-size: 18px; font-weight: bold; color: #10b981; border-top: 2px solid #eee; margin-top: 10px; padding-top: 10px; }
+            .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #999; }
+            @media print { .no-print { display: none; } }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="logo">ApnarPonno</div>
+            <div class="invoice-info">
+              <div style="font-weight: bold;">INVOICE</div>
+              <div>Order ID: #${order.id.substring(0, 8)}</div>
+              <div>Date: ${new Date().toLocaleDateString()}</div>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 50px;" class="section">
+            <div style="flex: 1;">
+              <div class="section-title">Bill To:</div>
+              <div style="font-weight: bold;">${order.shippingAddress.name}</div>
+              <div>${order.shippingAddress.phone}</div>
+              <div>${order.shippingAddress.address}</div>
+              <div>${order.shippingAddress.city}</div>
+            </div>
+            <div style="flex: 1;">
+              <div class="section-title">Payment Method:</div>
+              <div>${order.paymentMethod.toUpperCase()}</div>
+              <div class="section-title" style="margin-top: 15px;">Shipping Method:</div>
+              <div>Standard Delivery</div>
+            </div>
+          </div>
+
+          <div class="section">
+            <table>
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th style="text-align: center;">Qty</th>
+                  <th style="text-align: right;">Price</th>
+                  <th style="text-align: right;">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${itemsHtml}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="totals">
+            <div class="total-row">
+              <span>Subtotal:</span>
+              <span>৳${subtotal.toLocaleString()}</span>
+            </div>
+            <div class="total-row">
+              <span>Shipping:</span>
+              <span>৳${shipping.toLocaleString()}</span>
+            </div>
+            <div class="total-row grand-total">
+              <span>Total:</span>
+              <span>৳${order.totalAmount.toLocaleString()}</span>
+            </div>
+          </div>
+
+          <div class="footer">
+            <p>Thank you for shopping with ApnarPonno!</p>
+            <p>For any queries, contact us at support@apnarponno.com</p>
+          </div>
+
+          <script>
+            window.onload = () => { window.print(); window.close(); };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   const handleConvertToPending = async (orderId: string) => {
     try {
       await updateDoc(doc(db, 'orders', orderId), { 
@@ -904,6 +1254,40 @@ const OrderManagement = ({ showIncomplete = false }: { showIncomplete?: boolean 
     }
   };
 
+  const handleBulkStatusUpdate = async (newStatus: string) => {
+    if (selectedOrderIds.length === 0) return;
+    setLoading(true);
+    try {
+      await Promise.all(selectedOrderIds.map(id => 
+        updateDoc(doc(db, 'orders', id), { status: newStatus, updatedAt: new Date().toISOString() })
+      ));
+      toast.success(`Updated ${selectedOrderIds.length} orders to ${newStatus}`);
+      setSelectedOrderIds([]);
+      fetchOrders();
+    } catch (error) {
+      toast.error("Bulk update failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedOrderIds.length === 0) return;
+    if (window.confirm(`Delete ${selectedOrderIds.length} selected orders?`)) {
+      setLoading(true);
+      try {
+        await Promise.all(selectedOrderIds.map(id => deleteDoc(doc(db, 'orders', id))));
+        toast.success(`Deleted ${selectedOrderIds.length} orders`);
+        setSelectedOrderIds([]);
+        fetchOrders();
+      } catch (error) {
+        toast.error("Bulk delete failed");
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
   const filteredOrders = orders.filter(order => {
     const matchesSearch = 
       order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -918,9 +1302,31 @@ const OrderManagement = ({ showIncomplete = false }: { showIncomplete?: boolean 
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <h2 className="text-2xl font-bold tracking-tight">
-          {showIncomplete ? "Incomplete Orders" : "Order Management"}
-        </h2>
+        <div className="flex items-center gap-4">
+          <h2 className="text-2xl font-bold tracking-tight">
+            {showIncomplete ? "Incomplete Orders" : "Order Management"}
+          </h2>
+          {selectedOrderIds.length > 0 && (
+            <div className="flex items-center gap-2 bg-primary/5 px-3 py-1.5 rounded-xl border border-primary/10 animate-in fade-in slide-in-from-left-2">
+              <span className="text-xs font-bold text-primary">{selectedOrderIds.length} Selected</span>
+              <div className="h-4 w-[1px] bg-primary/20 mx-1" />
+              <select 
+                className="h-7 rounded-lg border-none bg-transparent text-[10px] font-bold text-primary focus:ring-0 cursor-pointer"
+                onChange={(e) => handleBulkStatusUpdate(e.target.value)}
+                value=""
+              >
+                <option value="" disabled>Update Status</option>
+                <option value="pending">Pending</option>
+                <option value="processing">Processing</option>
+                <option value="shipped">Shipped</option>
+                <option value="delivered">Delivered</option>
+              </select>
+              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" onClick={handleBulkDelete}>
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          )}
+        </div>
         <div className="flex items-center gap-2 w-full md:w-auto">
           <div className="relative flex-grow md:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -934,6 +1340,36 @@ const OrderManagement = ({ showIncomplete = false }: { showIncomplete?: boolean 
           <Button variant="outline" size="icon" onClick={fetchOrders} disabled={loading}>
             <Clock className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
+          <Button 
+            variant="outline" 
+            className="hidden md:flex items-center gap-2"
+            onClick={() => {
+              const csv = [
+                ['Order ID', 'Customer', 'Phone', 'Amount', 'Status', 'Date'].join(','),
+                ...filteredOrders.map(o => [
+                  o.id,
+                  o.shippingAddress.name,
+                  o.shippingAddress.phone,
+                  o.totalAmount,
+                  o.status,
+                  o.createdAt ? new Date((o.createdAt as any).seconds * 1000).toLocaleDateString() : 'N/A'
+                ].join(','))
+              ].join('\n');
+              const blob = new Blob([csv], { type: 'text/csv' });
+              const url = window.URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.setAttribute('hidden', '');
+              a.setAttribute('href', url);
+              a.setAttribute('download', `orders_report_${new Date().toISOString().split('T')[0]}.csv`);
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              toast.success("Report downloaded successfully");
+            }}
+          >
+            <BarChart3 className="h-4 w-4" />
+            <span className="text-xs font-bold">Export</span>
+          </Button>
         </div>
       </div>
 
@@ -942,6 +1378,25 @@ const OrderManagement = ({ showIncomplete = false }: { showIncomplete?: boolean 
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-12">
+                  <div 
+                    className={`h-4 w-4 rounded border flex items-center justify-center cursor-pointer transition-colors ${
+                      selectedOrderIds.length === filteredOrders.length && filteredOrders.length > 0
+                        ? 'bg-primary border-primary' 
+                        : 'border-slate-300 hover:border-primary'
+                    }`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (selectedOrderIds.length === filteredOrders.length) {
+                        setSelectedOrderIds([]);
+                      } else {
+                        setSelectedOrderIds(filteredOrders.map(o => o.id));
+                      }
+                    }}
+                  >
+                    {selectedOrderIds.length === filteredOrders.length && filteredOrders.length > 0 && <CheckCircle2 className="h-3 w-3 text-white" />}
+                  </div>
+                </TableHead>
                 <TableHead>Order ID</TableHead>
                 <TableHead>Customer</TableHead>
                 <TableHead>Phone</TableHead>
@@ -955,9 +1410,25 @@ const OrderManagement = ({ showIncomplete = false }: { showIncomplete?: boolean 
               {filteredOrders.map((order) => (
                 <React.Fragment key={order.id}>
                   <TableRow 
-                    className={`cursor-pointer transition-colors ${expandedOrderId === order.id ? 'bg-muted/50' : 'hover:bg-muted/30'}`} 
+                    className={`cursor-pointer transition-colors ${expandedOrderId === order.id ? 'bg-muted/50' : 'hover:bg-muted/30'} ${selectedOrderIds.includes(order.id) ? 'bg-primary/5' : ''}`} 
                     onClick={() => setExpandedOrderId(expandedOrderId === order.id ? null : order.id)}
                   >
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <div 
+                        className={`h-4 w-4 rounded border flex items-center justify-center cursor-pointer transition-colors ${
+                          selectedOrderIds.includes(order.id)
+                            ? 'bg-primary border-primary' 
+                            : 'border-slate-300 hover:border-primary'
+                        }`}
+                        onClick={() => {
+                          setSelectedOrderIds(prev => 
+                            prev.includes(order.id) ? prev.filter(i => i !== order.id) : [...prev, order.id]
+                          );
+                        }}
+                      >
+                        {selectedOrderIds.includes(order.id) && <CheckCircle2 className="h-3 w-3 text-white" />}
+                      </div>
+                    </TableCell>
                     <TableCell className="font-mono text-xs">{order.id.substring(0, 8)}...</TableCell>
                     <TableCell>
                       <div className="flex flex-col">
@@ -1016,12 +1487,22 @@ const OrderManagement = ({ showIncomplete = false }: { showIncomplete?: boolean 
                   
                   {expandedOrderId === order.id && (
                     <TableRow className="bg-muted/20 border-b-2 border-primary/10">
-                      <TableCell colSpan={7} className="p-0">
+                      <TableCell colSpan={8} className="p-0">
                         <motion.div 
                           initial={{ height: 0, opacity: 0 }}
                           animate={{ height: 'auto', opacity: 1 }}
                           className="p-6 overflow-hidden"
                         >
+                          <div className="mb-8 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                            <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2 text-center">Order Status Timeline</h3>
+                            <OrderTimeline 
+                              status={order.status} 
+                              createdAt={order.createdAt} 
+                              updatedAt={order.updatedAt} 
+                              courierInfo={order.courierInfo} 
+                            />
+                          </div>
+
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-6">
                             <div className="space-y-3">
                               <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Customer Info</h3>
@@ -1070,6 +1551,14 @@ const OrderManagement = ({ showIncomplete = false }: { showIncomplete?: boolean 
                                     </Button>
                                   )
                                 )}
+                                <Button 
+                                  variant="outline" 
+                                  className="mt-2 w-full h-8 text-xs font-bold border-slate-200 hover:bg-slate-50" 
+                                  onClick={() => handlePrintInvoice(order)}
+                                >
+                                  <Copy className="h-3 w-3 mr-2" />
+                                  Print Invoice
+                                </Button>
                               </div>
                             </div>
                           </div>
@@ -1542,9 +2031,15 @@ const SettingsManagement = () => {
     facebookUrl: '',
     instagramUrl: '',
     youtubeUrl: '',
-    announcement: 'Welcome to ApnarPonno - Your Trusted Online Shop!'
+    announcement: 'Welcome to ApnarPonno - Your Trusted Online Shop!',
+    primaryColor: '#10b981',
+    logoUrl: '',
+    chinaImportBanner: true,
+    chinaImportText: 'Directly Imported from China - Premium Quality Guaranteed',
+    themeMode: 'luxury'
   });
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -1560,6 +2055,23 @@ const SettingsManagement = () => {
     fetchSettings();
   }, []);
 
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const storageRef = ref(storage, `settings/logo_${Date.now()}`);
+      const snapshot = await uploadBytes(storageRef, file);
+      const url = await getDownloadURL(snapshot.ref);
+      setSettings(prev => ({ ...prev, logoUrl: url }));
+      toast.success("Logo uploaded!");
+    } catch (error) {
+      toast.error("Logo upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleSave = async () => {
     setLoading(true);
     try {
@@ -1569,7 +2081,10 @@ const SettingsManagement = () => {
       } else {
         await updateDoc(doc(db, 'settings', snap.docs[0].id), settings as any);
       }
-      toast.success("Settings updated successfully");
+      toast.success("Settings saved successfully");
+      if (settings.primaryColor) {
+        document.documentElement.style.setProperty('--primary', settings.primaryColor);
+      }
     } catch (error) {
       console.error("Error saving settings:", error);
       toast.error("Failed to save settings");
@@ -1579,66 +2094,135 @@ const SettingsManagement = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-4xl">
-      <h2 className="text-2xl font-bold tracking-tight">Site Settings</h2>
-      
-      <Card className="border-none shadow-sm">
-        <CardHeader>
-          <CardTitle>General Information</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div className="max-w-4xl space-y-8 pb-20">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight">Site Customization</h2>
+          <p className="text-muted-foreground text-sm">Manage your brand identity and site-wide settings.</p>
+        </div>
+        <Button onClick={handleSave} disabled={loading || uploading} className="gap-2">
+          {loading ? <Clock className="h-4 w-4 animate-spin" /> : <Settings className="h-4 w-4" />}
+          Save All Changes
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <Card className="border-none shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Tag className="h-4 w-4 text-primary" />
+              General Branding
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>Site Name</Label>
               <Input value={settings.siteName} onChange={e => setSettings({...settings, siteName: e.target.value})} />
             </div>
             <div className="space-y-2">
-              <Label>Announcement Bar</Label>
-              <Input value={settings.announcement} onChange={e => setSettings({...settings, announcement: e.target.value})} />
+              <Label>Logo</Label>
+              <div className="flex gap-4 items-center">
+                <div className="w-16 h-16 rounded-xl bg-muted border flex items-center justify-center overflow-hidden">
+                  {settings.logoUrl ? <img src={settings.logoUrl} alt="Logo" className="w-full h-full object-contain" /> : <ImageIcon className="h-6 w-6 text-muted-foreground" />}
+                </div>
+                <div className="flex-grow space-y-2">
+                  <Input type="file" accept="image/*" onChange={handleLogoUpload} disabled={uploading} />
+                  <Input value={settings.logoUrl} onChange={e => setSettings({...settings, logoUrl: e.target.value})} placeholder="Or logo URL" />
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Contact Email</Label>
-              <Input value={settings.contactEmail} onChange={e => setSettings({...settings, contactEmail: e.target.value})} />
+              <Label>Primary Brand Color</Label>
+              <div className="flex gap-3">
+                <Input type="color" className="w-12 h-10 p-1" value={settings.primaryColor} onChange={e => setSettings({...settings, primaryColor: e.target.value})} />
+                <Input value={settings.primaryColor} onChange={e => setSettings({...settings, primaryColor: e.target.value})} placeholder="#hex-color" />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Contact Phone</Label>
-              <Input value={settings.contactPhone} onChange={e => setSettings({...settings, contactPhone: e.target.value})} />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label>Physical Address</Label>
-            <Input value={settings.address} onChange={e => setSettings({...settings, address: e.target.value})} />
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-      <Card className="border-none shadow-sm">
-        <CardHeader>
-          <CardTitle>Social Links</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label>Facebook URL</Label>
-              <Input value={settings.facebookUrl} onChange={e => setSettings({...settings, facebookUrl: e.target.value})} />
+        <Card className="border-none shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Truck className="h-4 w-4 text-primary" />
+              China Import Branding
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between p-3 bg-primary/5 rounded-xl border border-primary/10">
+              <div className="space-y-0.5">
+                <Label className="text-sm font-bold">China Import Banner</Label>
+                <p className="text-[10px] text-muted-foreground">Show "Imported from China" badge on site</p>
+              </div>
+              <button 
+                className={`w-10 h-6 rounded-full transition-colors relative ${settings.chinaImportBanner ? 'bg-primary' : 'bg-slate-200'}`}
+                onClick={() => setSettings({...settings, chinaImportBanner: !settings.chinaImportBanner})}
+              >
+                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${settings.chinaImportBanner ? 'left-5' : 'left-1'}`} />
+              </button>
             </div>
             <div className="space-y-2">
-              <Label>Instagram URL</Label>
-              <Input value={settings.instagramUrl} onChange={e => setSettings({...settings, instagramUrl: e.target.value})} />
+              <Label>Import Banner Text</Label>
+              <Input value={settings.chinaImportText} onChange={e => setSettings({...settings, chinaImportText: e.target.value})} />
             </div>
             <div className="space-y-2">
-              <Label>YouTube URL</Label>
-              <Input value={settings.youtubeUrl} onChange={e => setSettings({...settings, youtubeUrl: e.target.value})} />
+              <Label>Theme Style</Label>
+              <select 
+                className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={settings.themeMode}
+                onChange={e => setSettings({...settings, themeMode: e.target.value as any})}
+              >
+                <option value="light">Modern Light</option>
+                <option value="dark">Sleek Dark</option>
+                <option value="luxury">Editorial Luxury</option>
+              </select>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-      <Button onClick={handleSave} disabled={loading} className="w-full h-12 text-lg">
-        {loading ? "Saving..." : "Save All Settings"}
-      </Button>
+        <Card className="border-none shadow-sm md:col-span-2">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Users className="h-4 w-4 text-primary" />
+              Contact & Support Info
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Contact Email</Label>
+                <Input value={settings.contactEmail} onChange={e => setSettings({...settings, contactEmail: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <Label>Contact Phone</Label>
+                <Input value={settings.contactPhone} onChange={e => setSettings({...settings, contactPhone: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <Label>Store Address</Label>
+                <textarea 
+                  className="w-full min-h-[80px] rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={settings.address} 
+                  onChange={e => setSettings({...settings, address: e.target.value})} 
+                />
+              </div>
+            </div>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Announcement Bar Text</Label>
+                <Input value={settings.announcement} onChange={e => setSettings({...settings, announcement: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <Label>Facebook Page URL</Label>
+                <Input value={settings.facebookUrl} onChange={e => setSettings({...settings, facebookUrl: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <Label>Instagram URL</Label>
+                <Input value={settings.instagramUrl} onChange={e => setSettings({...settings, instagramUrl: e.target.value})} />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };

@@ -9,7 +9,7 @@ import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { ShoppingCart, Heart, Share2, ShieldCheck, Truck, RotateCcw, Star, Minus, Plus, Clock, Send, User } from 'lucide-react';
+import { ShoppingCart, Heart, Share2, ShieldCheck, Truck, RotateCcw, Star, Minus, Plus, Clock, Send, User, Zap } from 'lucide-react';
 import { ProductCard } from '../components/ProductCard';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
@@ -27,6 +27,28 @@ const ProductDetail = () => {
   const [activeImage, setActiveImage] = useState(0);
   const [newReview, setNewReview] = useState({ rating: 5, comment: '' });
   const [submittingReview, setSubmittingReview] = useState(false);
+  const [timeLeft, setTimeLeft] = useState({ hours: 0, minutes: 0, seconds: 0 });
+
+  useEffect(() => {
+    if (product?.isFlashSale && product.flashSaleEnd) {
+      const timer = setInterval(() => {
+        const end = new Date(product.flashSaleEnd!).getTime();
+        const now = new Date().getTime();
+        const diff = end - now;
+        if (diff <= 0) {
+          clearInterval(timer);
+          setTimeLeft({ hours: 0, minutes: 0, seconds: 0 });
+        } else {
+          setTimeLeft({
+            hours: Math.floor((diff / (1000 * 60 * 60))),
+            minutes: Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)),
+            seconds: Math.floor((diff % (1000 * 60)) / 1000)
+          });
+        }
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [product]);
 
   const fetchReviews = async () => {
     if (!id) return;
@@ -142,10 +164,35 @@ const ProductDetail = () => {
         {/* Info */}
         <div className="space-y-10">
           <div className="space-y-6">
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <Badge className="bg-primary/10 text-primary border-none px-4 py-1 rounded-full uppercase tracking-[0.2em] text-[10px] font-bold">{product.category}</Badge>
+              {product.isChinaImport && (
+                <Badge className="bg-amber-400 text-slate-900 border-none px-4 py-1 rounded-full uppercase tracking-[0.2em] text-[10px] font-black flex items-center gap-2">
+                  <Truck className="h-3 w-3" />
+                  Directly Imported from China
+                </Badge>
+              )}
               {product.stock > 0 && <span className="text-[10px] uppercase font-bold text-primary tracking-widest">Available Now</span>}
             </div>
+            
+            {product.isFlashSale && (
+              <div className="bg-red-500 text-white p-4 rounded-2xl flex items-center justify-between shadow-lg shadow-red-500/20">
+                <div className="flex items-center gap-3">
+                  <Zap className="h-6 w-6 fill-current animate-pulse" />
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest">Flash Sale Ending In</p>
+                    <div className="flex gap-2 font-mono text-xl font-bold">
+                      <span>{String(timeLeft.hours).padStart(2, '0')}h</span>
+                      <span>:</span>
+                      <span>{String(timeLeft.minutes).padStart(2, '0')}m</span>
+                      <span>:</span>
+                      <span>{String(timeLeft.seconds).padStart(2, '0')}s</span>
+                    </div>
+                  </div>
+                </div>
+                <Badge variant="secondary" className="bg-white/20 text-white border-none">Limited Time</Badge>
+              </div>
+            )}
             <h1 className="text-5xl md:text-7xl font-heading tracking-tight leading-[0.9]">{product.name}</h1>
             <div className="flex items-center gap-6">
               <div className="flex items-center gap-1.5 bg-yellow-400/10 px-3 py-1 rounded-full">
